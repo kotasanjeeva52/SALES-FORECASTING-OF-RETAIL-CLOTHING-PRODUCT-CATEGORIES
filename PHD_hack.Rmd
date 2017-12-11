@@ -1,0 +1,476 @@
+---
+title: "Time series on SFRPC"
+author: "sanjeeva"
+date: "November 18, 2017"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+###Clear the Global Environment
+```{r}
+rm(list=ls(all=TRUE))
+```
+
+### Library Call
+```{r}
+library(forecast)
+library(lubridate)
+library(DataCombine)
+library(imputeTS)
+library(dplyr)
+library(TTR)
+library(graphics)
+library(data.table)
+library(plyr)
+
+library(zoo)
+```
+
+* To read RData type file use readRDS function
+```{r}
+
+
+getwd()
+df=read.csv("Train.csv",header = T)
+sum(is.na(df))
+
+```
+## Basic data View
+```{r}
+head(df,30)
+
+str(df)
+
+summary(df)
+
+sum(is.na(df))
+
+
+```
+
+
+##filling the NA values using KNN imputation
+```{r}
+library(DMwR)
+
+Train_Data1 <- centralImputation(df) #KNN Imputation
+sum(is.na(Train_Data1))
+
+str(Train_Data1)
+```
+
+```{r}
+
+class(Train_Data1)
+
+Train_Data1$ProductCategory <- as.character(Train_Data1$ProductCategory)
+```
+
+
+
+
+### use the aggregator function to get the Date format 
+```{r}
+
+
+
+head(Train_Data1)
+
+Train_data2<-transform(Train_Data1, Date = as.Date(paste(Year, Month, 1, sep = "-")))
+
+str(Train_data2)
+
+head(Train_data2)
+
+```
+
+```{r}
+
+
+women_data<-subset(Train_Data1,Train_Data1$ProductCategory=='WomenClothing')
+
+Men_data<-subset(Train_Data1,Train_Data1$ProductCategory=='MenClothing')
+
+other_data<-subset(Train_Data1,Train_Data1$ProductCategory=='OtherClothing')
+
+
+head(women_data)
+
+
+```
+
+#Covert above dataframes in Timeseries dataframes--MEN DATA
+```{r}
+Men_dataTS<-ts(Men_data[,4],start = c(2009,1),frequency = 12)
+Men_dataTS
+plot(Men_dataTS)
+
+```
+
+#Covert above dataframes in Timeseries dataframes--Women data
+```{r}
+women_dataTS<-ts(women_data[,4],start = c(2009,1),frequency = 12)
+women_dataTS
+plot(women_dataTS)
+
+
+```
+###Covert above dataframes in Timeseries dataframes--Others data
+```{r}
+Other_TS<-ts(other_data[,4],start = c(2009,1),frequency = 12)
+Other_TS
+plot(Other_TS)
+```
+
+### Vizualize the time series Data for different product Categories
+```{r}
+plot(Men_dataTS,
+     type="l",
+     lwd=3,
+     col="blue",
+     xlab="year",
+     ylab="Sales(In ThousandDollars)",
+     main="Time series plot for MenclothingTS")
+
+plot(women_dataTS,
+     type="l",
+     lwd=3,
+     col="yellow",
+     xlab="year",
+     ylab="Sales(In ThousandDollars)",
+     main="Time series plot for WomenclothingTS")
+
+plot(Other_TS,
+     type="l",
+     lwd=3,
+     col="black",
+     xlab="year",
+     ylab="Sales(In ThousandDollars)",
+     main="Time series plot for OtherclothingTS")
+
+```
+### Decomposed Time Series
+#Decompose will provide us with the info on seasonality,trend and randomness
+```{r}
+
+
+Men_decomposed=decompose(Men_dataTS)
+plot(Men_decomposed,col="BLUE")
+
+
+Women_decomposed=decompose(women_dataTS)
+plot(Women_decomposed,col="ORANGE")
+
+Other_decomposed=decompose(Other_TS)
+plot(Other_decomposed,col="BLACK")
+```
+
+
+
+### Modelling  the time series using simple moving averages
+* Time series Price has trend 
+* Modelling the time series behaviour by simple moving averages
+```{r}
+fitsma <- SMA(Men_dataTS,n=2)
+
+```
+
+### Define the metric MAPE 
+```{r}
+smaMape <- mean(abs((Men_dataTS[2:length(Men_dataTS)]-fitsma[2:length(Men_dataTS)])/Men_dataTS[2:length(Men_dataTS)]))
+smaMape
+
+
+```
+
+### Weighted Moving Averages
+```{r}
+fitwma<- WMA(Men_dataTS,n=2,1:2)
+wmaMape_men <- mean(abs((Men_dataTS[2:length(Men_dataTS)]-fitwma[2:length(Men_dataTS)])/Men_dataTS[2:length(Men_dataTS)]))
+wmaMape_men
+
+
+
+fitwma<- WMA(women_dataTS,n=2,1:2)
+wmaMape_women <- mean(abs((women_dataTS[2:length(women_dataTS)]-fitwma[2:length(women_dataTS)])/women_dataTS[2:length(women_dataTS)]))
+wmaMape_women
+
+
+
+fitwma<- WMA(Other_TS,n=2,1:2)
+wmaMape_other <- mean(abs((Other_TS[2:length(Other_TS)]-fitwma[2:length(Other_TS)])/Other_TS[2:length(Other_TS)]))
+wmaMape_other
+
+
+
+
+```
+
+### Exponential Moving Averages
+```{r}
+fitEma <- EMA(Men_dataTS, n = 2)
+emaMape <- mean(abs((Men_dataTS[2:length(Men_dataTS)]-fitEma[2:length(Men_dataTS)])/Men_dataTS[2:length(Men_dataTS)]))
+emaMape
+pred<-forecast(fitEma,h=4)
+plot(pred)
+lines(fitEma,col="purple")
+
+fitEma <- EMA(women_dataTS, n = 2)
+emaMape <- mean(abs((Men_dataTS[2:length(women_dataTS)]-fitEma[2:length(women_dataTS)])/women_dataTS[2:length(women_dataTS)]))
+emaMape
+
+plot(pred)
+
+
+fitEma <- EMA(Other_TS, n = 2)
+emaMape <- mean(abs((Other_TS[2:length(Other_TS)]-fitEma[2:length(Other_TS)])/Other_TS[2:length(Other_TS)]))
+emaMape
+
+plot(pred)
+
+
+```
+
+
+
+
+## HoltWinters model  with trend  and Seasonality--MEN
+
+```{r}
+sales_men <-
+HoltWinters(Men_dataTS, beta=FALSE, gamma=FALSE, seasonal="multiplicative")
+head(sales_men$fitted)
+```
+*Since you are building the models on weekly data, you will get 52 seasonal components. If you   are reading the monthly data, you will get 12 seasonal components
+
+### Prediction on the Train
+```{r}
+holtforecastTrain <- data.frame(sales_men$fitted)
+holtforecastTrainpredictions <- holtforecastTrain$xhat
+head(holtforecastTrainpredictions)
+```
+
+### Prediction on test data
+```{r}
+priceforecast<-forecast(sales_men,h = 12)
+plot(priceforecast,ylim = c(-200,200))
+
+```
+##holt winters for women
+```{r}
+sales_women <-
+HoltWinters(women_dataTS, beta=FALSE, gamma=FALSE, seasonal="multiplicative")
+head(sales_women$fitted)
+```
+*Since you are building the models on weekly data, you will get 52 seasonal components. If you   are reading the monthly data, you will get 12 seasonal components
+
+### Prediction on the Train
+```{r}
+holtforecastTrain_women <- data.frame(sales_women$fitted)
+holtforecastTrainpredictions_women <- holtforecastTrain_women$xhat
+head(holtforecastTrainpredictions_women)
+```
+
+### Prediction on test data
+```{r}
+priceforecast_women<-forecast(sales_women,h = 12)
+plot(priceforecast_women,ylim = c(-200,200))
+
+
+```
+##holt winters for Others
+```{r}
+sales_others <-
+HoltWinters(Other_TS, beta=FALSE, gamma=FALSE, seasonal="multiplicative")
+head(sales_others$fitted)
+```
+*Since you are building the models on weekly data, you will get 52 seasonal components. If you   are reading the monthly data, you will get 12 seasonal components
+
+### Prediction on the Train
+```{r}
+holtforecastTrain_others <- data.frame(sales_others$fitted)
+holtforecastTrainpredictions_others<- holtforecastTrain_others$xhat
+head(holtforecastTrainpredictions_others)
+```
+
+### Prediction on test data
+```{r}
+priceforecast_others<-forecast(sales_others,h = 12)
+plot(priceforecast_others,ylim = c(-200,200))
+
+
+```
+
+### Arima Models
+```{r}
+##men
+model1_men <- arima(Men_dataTS,c(0,0,0))
+model1_men
+acf(Men_dataTS) 
+pacf(Men_dataTS)
+plot(Men_dataTS)
+
+##women
+
+model1_women <- arima(women_dataTS,c(0,0,0))
+model1_women
+acf(women_dataTS) 
+pacf(women_dataTS)
+plot(women_dataTS)
+
+##others
+model1_Other <- arima(Other_TS,c(0,0,0))
+model1_Other
+acf(Other_TS) 
+pacf(Other_TS)
+plot(Other_TS)
+
+```
+
+
+# AUTO ARIMA
+```{r}
+
+Men_AA <- auto.arima(Men_dataTS,ic='aic')
+Men_AA
+
+Women_AA<- auto.arima(women_dataTS,ic='aic')
+Women_AA
+
+Other_AA <- auto.arima(Other_TS,ic='aic')
+Other_AA
+```
+#MenAutoArima <- forecast.Arima(MenAutoArima, h=12)
+```{r}
+
+
+MenTSforecasts <- forecast(Men_AA, h=12)
+
+plot(MenTSforecasts)
+MenTSforecasts
+
+
+```
+
+#WomenAutoArima <- forecast.Arima(WomenAutoArima, h=12)
+```{r}
+WomenTSforecastsAutoArima <- forecast(Women_AA, h=12)
+
+plot(WomenTSforecastsAutoArima)
+WomenTSforecastsAutoArima
+
+```
+
+
+#OtherAutoArima <- forecast.Arima(OtherAutoArima, h=12)
+```{r}
+OtherTSforecasts <- forecast(Other_AA, h=12)
+#plot.forecast(OtherTSforecastsAutoArima)
+plot(OtherTSforecasts)
+OtherTSforecasts$mean
+```
+##AUTO ARIMA OUTPUT
+```{r}
+
+final_data_forecast<-cbind(WomenTSforecastsAutoArima$mean,MenTSforecasts$mean,OtherTSforecasts$mean)
+
+
+
+###output file 
+##write.csv(final_data_forecast, "E:/proofs/PHD/output_45.csv")
+```
+
+##HOLTWINTERS OUTPUT
+```{r}
+
+
+final_data_forecast_holt1<-cbind(priceforecast_women$mean,priceforecast$mean,priceforecast_others$mean)
+
+
+
+###output file 
+##write.csv(final_data_forecast_holt1, "E:/proofs/PHD/output_holt_2.csv")
+
+```
+
+
+```{r}
+Men_AA_v1 <- auto.arima(Men_dataTS,ic='aicc')
+
+Men_AA_v1
+
+Women_AA_v1<- auto.arima(women_dataTS,ic='aicc')
+Women_AA_v1
+
+Other_AA_v1 <- auto.arima(Other_TS,ic='aicc')
+Other_AA
+```
+
+#MenAutoArima <- forecast.Arima(MenAutoArima, h=12)
+```{r}
+
+
+MenTSforecasts_v1 <- forecast(Men_AA_v1, h=12)
+
+plot(MenTSforecasts_v1)
+MenTSforecasts_v1
+
+
+```
+
+#WomenAutoArima <- forecast.Arima(WomenAutoArima, h=12)
+```{r}
+WomenTSforecastsAutoArima_v1 <- forecast(Women_AA_v1, h=12)
+
+plot(WomenTSforecastsAutoArima)
+WomenTSforecastsAutoArima_v1
+
+```
+
+
+#OtherAutoArima <- forecast.Arima(OtherAutoArima, h=12)
+```{r}
+OtherTSforecasts_v1 <- forecast(Other_AA_v1, h=12)
+#plot.forecast(OtherTSforecastsAutoArima)
+plot(OtherTSforecasts)
+OtherTSforecasts$mean
+```
+
+
+##AUTO ARIMA OUTPUT
+```{r}
+
+final_data_forecast<-cbind(WomenTSforecastsAutoArima_v1$mean,MenTSforecasts_v1$mean,OtherTSforecasts_v1$mean)
+
+
+
+###output file 
+##write.csv(final_data_forecast, "E:/proofs/PHD/output_v2.csv")
+```
+
+
+
